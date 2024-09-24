@@ -110,6 +110,24 @@ Resources:
         - "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
         - "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess"
         - "arn:aws:iam::aws:policy/AWSCodeArtifactReadOnlyAccess"
+          
+  CodeDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - 
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "codedeploy.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
+      RoleName: "UnicornCodeDeployRole"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/AWSCodeDeployRole"
 
   DeployRoleProfile: 
     Type: AWS::IAM::InstanceProfile
@@ -141,18 +159,6 @@ Resources:
           Value: !Ref TagValue
         - Key: 'User'
           Value: !Ref TagValue
-      Userdata:
-        Fn::Base64: |
-          #!/usr/bin/bash
-          
-          wget https://repos.fedorapeople.org/repos/dchen/apache-maven/epel-apache-maven.repo -O /etc/yum.repos.d/epel-apache-maven.repo
-          sed -i s/\$releasever/6/g /etc/yum.repos.d/epel-apache-maven.repo
-          yum install -y apache-maven
-         
-          sudo amazon-linux-extras enable corretto8
-          sudo yum install -y java-1.8.0-amazon-corretto-devel
-          echo "JAVA_HOME=/usr/lib/jvm/java-1.8.0-amazon-corretto.x86_64" >> /home/ec2-user/.bashrc
-          echo "PATH=/usr/lib/jvm/java-1.8.0-amazon-corretto.x86_64/jre/bin/:/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/home/ec2-user/.local/bin:/home/ec2-user/bin" >> /home/ec2-user/.bashrc
 
   Workspace:
     Type: AWS::EC2::Instance
@@ -176,41 +182,25 @@ Resources:
           Value: !Ref TagValue
         - Key: 'User'
           Value: !Ref TagValue
-
-  WebServer2:
-    Type: AWS::EC2::Instance
-    Properties:
-      ImageId: !Ref AmazonLinuxAMIID
-      InstanceType: t2.micro
-      IamInstanceProfile: !Ref DeployRoleProfile
-      NetworkInterfaces: 
-        - AssociatePublicIpAddress: true
-          DeviceIndex: 0
-          GroupSet: 
-            - Ref: PublicSecurityGroup
-          SubnetId: 
-            Ref: PublicSubnetA
-      Tags:
-        - Key: 'Name'
-          Value: !Join ['', [!Ref 'AWS::StackName', '::WebServer2'] ]
-        - Key: 'role'
-          Value: 'webserver2'
-        - Key: 'Cost'
-          Value: !Ref TagValue
-        - Key: 'User'
-          Value: !Ref TagValue
-      Userdata:
+      UserData:
         Fn::Base64: |
           #!/usr/bin/bash
           
           wget https://repos.fedorapeople.org/repos/dchen/apache-maven/epel-apache-maven.repo -O /etc/yum.repos.d/epel-apache-maven.repo
           sed -i s/\$releasever/6/g /etc/yum.repos.d/epel-apache-maven.repo
-          yum install -y apache-maven
+          yum install -y apache-maven tree git
          
-          sudo amazon-linux-extras enable corretto8
-          sudo yum install -y java-1.8.0-amazon-corretto-devel
+          amazon-linux-extras enable corretto8
+          yum install -y java-1.8.0-amazon-corretto-devel
           echo "JAVA_HOME=/usr/lib/jvm/java-1.8.0-amazon-corretto.x86_64" >> /home/ec2-user/.bashrc
           echo "PATH=/usr/lib/jvm/java-1.8.0-amazon-corretto.x86_64/jre/bin/:/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/home/ec2-user/.local/bin:/home/ec2-user/bin" >> /home/ec2-user/.bashrc
+          sudo -i -u ec2-user mkdir /home/ec2-user/environment
+          sudo -i -u ec2-user mvn archetype:generate \
+              -DgroupId=com.wildrydes.app \
+              -DartifactId=unicorn-web-project \
+              -DarchetypeArtifactId=maven-archetype-webapp \
+              -DinteractiveMode=false \
+              -DoutputDirectory=/home/ec2-user/environment
 
 Outputs:
   URL:
