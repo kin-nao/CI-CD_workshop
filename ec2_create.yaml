@@ -127,7 +127,7 @@ Resources:
       Path: "/"
       RoleName: "UnicornCodeDeployRole"
       ManagedPolicyArns:
-        - "arn:aws:iam::aws:policy/AWSCodeDeployRole"
+        - "arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole"
 
   DeployRoleProfile: 
     Type: AWS::IAM::InstanceProfile
