@@ -1,0 +1,103 @@
+---
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+  AmazonLinuxAMIID:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
+  MyIP:
+    Type: String
+    Description: My IP address e.g. 1.2.3.4/32 for Security Group HTTP access rule. Get your IP from http://checkip.amazonaws.com/.
+    AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/32
+    ConstraintDescription: must be a valid IP address of the form x.x.x.x/32
+  TagValue:
+    Type: String
+    Default: CICD_workshop
+  PublicSecurityGroup:
+    Type: AWS::EC2::SecurityGroup::Id
+  PublicSubnetA:
+    Type: AWS::EC2::Subnet::Id
+
+Resources:
+  DeployRoleProfile: 
+    Type: AWS::IAM::InstanceProfile
+    Properties: 
+      Path: "/"
+      Roles: 
+        - "UnicornServerRole"
+
+  WebServer:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AmazonLinuxAMIID
+      InstanceType: t2.micro
+      IamInstanceProfile: !Ref DeployRoleProfile
+      NetworkInterfaces: 
+        - AssociatePublicIpAddress: true
+          DeviceIndex: 0
+          GroupSet: 
+            - Ref: PublicSecurityGroup
+          SubnetId: 
+            Ref: PublicSubnetA
+      Tags:
+        - Key: 'Name'
+          Value: !Join ['', [!Ref 'AWS::StackName', '::WebServer'] ]
+        - Key: 'role'
+          Value: !Ref TagValue
+        - Key: 'Cost'
+          Value: !Ref TagValue
+        - Key: 'User'
+          Value: !Ref TagValue
+
+  Workspace:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AmazonLinuxAMIID
+      InstanceType: t2.micro
+      IamInstanceProfile: !Ref DeployRoleProfile
+      NetworkInterfaces: 
+        - AssociatePublicIpAddress: true
+          DeviceIndex: 0
+          GroupSet: 
+            - Ref: PublicSecurityGroup
+          SubnetId: 
+            Ref: PublicSubnetA
+      Tags:
+        - Key: 'Name'
+          Value: !Join ['', [!Ref 'AWS::StackName', '::Workspace'] ]
+        - Key: 'role'
+          Value: 'workspace'
+        - Key: 'Cost'
+          Value: !Ref TagValue
+        - Key: 'User'
+          Value: !Ref TagValue
+      UserData:
+        Fn::Base64: |
+          #!/usr/bin/bash
+          
+          wget https://repos.fedorapeople.org/repos/dchen/apache-maven/epel-apache-maven.repo -O /etc/yum.repos.d/epel-apache-maven.repo
+          sed -i s/\$releasever/6/g /etc/yum.repos.d/epel-apache-maven.repo
+          yum install -y apache-maven tree git
+         
+          amazon-linux-extras enable corretto8
+          yum install -y java-1.8.0-amazon-corretto-devel
+          echo "JAVA_HOME=/usr/lib/jvm/java-1.8.0-amazon-corretto.x86_64" >> /home/ec2-user/.bashrc
+          echo "PATH=/usr/lib/jvm/java-1.8.0-amazon-corretto.x86_64/jre/bin/:/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/home/ec2-user/.local/bin:/home/ec2-user/bin" >> /home/ec2-user/.bashrc
+          sudo -i -u ec2-user mkdir /home/ec2-user/environment
+          sudo -i -u ec2-user mvn archetype:generate \
+              -DgroupId=com.wildrydes.app \
+              -DartifactId=unicorn-web-project \
+              -DarchetypeArtifactId=maven-archetype-webapp \
+              -DinteractiveMode=false \
+              -DoutputDirectory=/home/ec2-user/environment
+
+Outputs:
+  URL:
+    Value:
+      Fn::Join:
+      - ''
+      - - http://
+        - Fn::GetAtt:
+          - WebServer
+          - PublicIp
+    Description: Unicorn web server
+
